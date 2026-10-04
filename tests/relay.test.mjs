@@ -66,3 +66,15 @@ test('bounded stream closes on oversized upstream download',async()=>{
   const relay=createRelay({fetchImpl:async()=>new Response(stream)});
   assert.equal((await relay(new Request(address(VERSION)))).status,502);assert.equal(cancelled,true);
 });
+test('immutable ranges return exact bytes and identity without forwarding Range upstream',async()=>{
+  const body=Buffer.from('immutable file');let call;
+  const relay=createRelay({fetchImpl:async(...x)=>{call=x;return new Response(body);}});
+  const response=await relay(new Request(address('/api/v1/code-update/download/R254'),{headers:{Range:'bytes=2-6'}}));
+  assert.equal(response.status,206);assert.equal(response.headers.get('content-range'),'bytes 2-6/14');
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()),body.subarray(2,7));assert.equal(call[1].headers.has('range'),false);
+});
+test('invalid, oversized or out-of-file ranges fail closed',async()=>{
+  const relay=createRelay({fetchImpl:async()=>new Response(new Uint8Array(200*1024))});
+  for(const range of ['bytes=0-','bytes=10-2','bytes=0-200000','bytes=204800-204801'])
+    assert.equal((await relay(new Request(address('/api/v1/code-update/download/R254'),{headers:{Range:range}}))).status,416);
+});

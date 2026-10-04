@@ -60,9 +60,21 @@ export function createRelay({fetchImpl = fetch, publishEnabled = false} = {}) {
         {method, headers, body, redirect:'manual', signal:AbortSignal.timeout(45000)});
       if (upstream.status >= 300 && upstream.status < 400) return reply(502, 'upstream redirect forbidden');
       const bytes = await bounded(upstream.body);
+      const range = request.headers.get('range');
+      if (range && (publishing || !download)) return reply(400, 'range only for immutable downloads');
+      if (range && upstream.status === 200) {
+        const match = /^bytes=(\d+)-(\d+)$/.exec(range);
+        if (!match) return reply(416, 'explicit byte range required');
+        const start=Number(match[1]), end=Number(match[2]);
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start>end || end>=bytes.length || end-start+1>128*1024)
+          return reply(416, 'bounded range outside immutable file');
+        const slice=bytes.slice(start,end+1);
+        return new Response(slice,{status:206,headers:{'content-type':'application/octet-stream','content-length':String(slice.length),
+          'content-range':`bytes ${start}-${end}/${bytes.length}`,'cache-control':'no-store','x-content-type-options':'nosniff'}});
+      }
       return new Response(bytes, {status:upstream.status, headers:{
         'content-type':upstream.headers.get('content-type') || 'application/octet-stream',
-        'cache-control':'no-store', 'x-content-type-options':'nosniff'}});
+        'content-length':String(bytes.length),'cache-control':'no-store', 'x-content-type-options':'nosniff'}});
     } catch {
       // POST may have reached Worker: caller MUST reconcile through GET before retry.
       return reply(502, publishing ? 'publish outcome unresolved; read-only reconciliation required' : 'official read failed');
