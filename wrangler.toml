@@ -1,0 +1,4 @@
+name = "listingtool-official-transport"
+main = "relay.mjs"
+compatibility_date = "2026-10-04"
+# Worker entrypoint remains read-only until a separately gated revision enables POST.
