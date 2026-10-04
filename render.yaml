@@ -3,7 +3,6 @@ services:
     name: listingtool-official-transport
     runtime: node
     plan: free
-    rootDir: tools/release-relay
     buildCommand: node --test tests/*.test.mjs
     startCommand: node server.mjs
     healthCheckPath: /health
